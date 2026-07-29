@@ -19,6 +19,21 @@ public class PlayerControlChannel : NetworkBehaviour
     [SerializeField, Min(1f)]
     private float sendsPerSecond = 30f;
 
+    /*
+     * Stable player identity.
+     *
+     * Body controllers should use Slot to determine which player
+     * supplied an input.
+     */
+    private readonly SyncVar<PlayerSlot> _slot =
+        new(PlayerSlot.None);
+
+    /*
+     * Legacy walking-body assignment.
+     *
+     * This remains here temporarily so your existing walking prefab
+     * does not need to be rewritten immediately.
+     */
     private readonly SyncVar<PlayerControlRole> _role =
         new(PlayerControlRole.None);
 
@@ -27,8 +42,26 @@ public class PlayerControlChannel : NetworkBehaviour
     private Vector2 _lastSentAxis;
     private bool _lastSentAction;
 
+    public PlayerSlot Slot => _slot.Value;
+
     public PlayerControlRole Role => _role.Value;
 
+    /*
+     * Full server-validated Vector2 input.
+     *
+     * New body controllers should use this property.
+     */
+    public Vector2 RawServerAxisInput { get; private set; }
+
+    public bool RawServerActionHeld { get; private set; }
+
+    public bool RawServerActionPressedThisTick { get; private set; }
+
+    /*
+     * Input filtered according to the old PlayerControlRole.
+     *
+     * Existing walking-body scripts can continue using these.
+     */
     public Vector2 ServerAxisInput { get; private set; }
 
     public bool ServerActionHeld { get; private set; }
@@ -41,12 +74,21 @@ public class PlayerControlChannel : NetworkBehaviour
 
         ServerChannels.Add(this);
 
-        AssignNextAvailableRole();
+        AssignNextAvailableSlot();
+        AssignNextAvailableLegacyRole();
     }
 
     public override void OnStopServer()
     {
         ServerChannels.Remove(this);
+
+        RawServerAxisInput = Vector2.zero;
+        RawServerActionHeld = false;
+        RawServerActionPressedThisTick = false;
+
+        ServerAxisInput = Vector2.zero;
+        ServerActionHeld = false;
+        ServerActionPressedThisTick = false;
 
         base.OnStopServer();
     }
@@ -84,11 +126,15 @@ public class PlayerControlChannel : NetworkBehaviour
         if (!IsOwner)
             return;
 
-        Vector2 axisInput = ReadAxisInput();
-        bool actionHeld = ReadActionInput();
+        Vector2 axisInput = ReadRawAxisInput();
+        bool actionHeld = ReadRawActionInput();
 
-        bool axisChanged = axisInput != _lastSentAxis;
-        bool actionChanged = actionHeld != _lastSentAction;
+        bool axisChanged =
+            axisInput != _lastSentAxis;
+
+        bool actionChanged =
+            actionHeld != _lastSentAction;
+
         bool sendIntervalReached =
             Time.unscaledTime >= _nextSendTime;
 
@@ -103,7 +149,8 @@ public class PlayerControlChannel : NetworkBehaviour
         _lastSentAction = actionHeld;
 
         _nextSendTime =
-            Time.unscaledTime + (1f / sendsPerSecond);
+            Time.unscaledTime +
+            (1f / sendsPerSecond);
 
         SubmitControlInputServerRpc(
             axisInput,
@@ -111,7 +158,7 @@ public class PlayerControlChannel : NetworkBehaviour
         );
     }
 
-    private Vector2 ReadAxisInput()
+    private Vector2 ReadRawAxisInput()
     {
         if (moveAction == null)
             return Vector2.zero;
@@ -119,30 +166,11 @@ public class PlayerControlChannel : NetworkBehaviour
         Vector2 input =
             moveAction.action.ReadValue<Vector2>();
 
-        input = Vector2.ClampMagnitude(input, 1f);
-
-        switch (Role)
-        {
-            case PlayerControlRole.ForwardBackward:
-                return new Vector2(0f, input.y);
-
-            case PlayerControlRole.Turning:
-                return new Vector2(input.x, 0f);
-
-            case PlayerControlRole.LeftArm:
-            case PlayerControlRole.RightArm:
-                return input;
-
-            default:
-                return Vector2.zero;
-        }
+        return Vector2.ClampMagnitude(input, 1f);
     }
 
-    private bool ReadActionInput()
+    private bool ReadRawActionInput()
     {
-        if (Role != PlayerControlRole.RightArm)
-            return false;
-
         if (actionButton == null)
             return false;
 
@@ -154,22 +182,51 @@ public class PlayerControlChannel : NetworkBehaviour
         Vector2 axisInput,
         bool actionHeld)
     {
-        axisInput = Vector2.ClampMagnitude(axisInput, 1f);
+        Vector2 sanitizedRawInput =
+            Vector2.ClampMagnitude(axisInput, 1f);
+
+        /*
+         * New body-system values.
+         *
+         * These retain both X and Y regardless of the old role.
+         */
+        RawServerActionPressedThisTick =
+            actionHeld &&
+            !RawServerActionHeld;
+
+        RawServerAxisInput =
+            sanitizedRawInput;
+
+        RawServerActionHeld =
+            actionHeld;
+
+        /*
+         * Legacy walking-body values.
+         *
+         * These behave like your previous implementation.
+         */
+        ServerAxisInput =
+            SanitizeInputForLegacyRole(
+                sanitizedRawInput
+            );
+
+        bool legacyActionHeld =
+            Role == PlayerControlRole.RightArm &&
+            actionHeld;
 
         ServerActionPressedThisTick =
-            actionHeld && !ServerActionHeld;
+            legacyActionHeld &&
+            !ServerActionHeld;
 
-        ServerAxisInput = SanitizeInputForRole(axisInput);
-        ServerActionHeld = actionHeld;
+        ServerActionHeld =
+            legacyActionHeld;
     }
 
-    private Vector2 SanitizeInputForRole(Vector2 input)
+    private Vector2 SanitizeInputForLegacyRole(
+        Vector2 input)
     {
-        // The server validates input based on the assigned role.
-        // A modified client cannot submit turning through the
-        // ForwardBackward role, for example.
-
-        input = Vector2.ClampMagnitude(input, 1f);
+        input =
+            Vector2.ClampMagnitude(input, 1f);
 
         switch (Role)
         {
@@ -194,7 +251,63 @@ public class PlayerControlChannel : NetworkBehaviour
         }
     }
 
-    private void AssignNextAvailableRole()
+    private void AssignNextAvailableSlot()
+    {
+        if (!IsServerInitialized)
+            return;
+
+        PlayerSlot[] slotOrder =
+        {
+            PlayerSlot.Player1,
+            PlayerSlot.Player2,
+            PlayerSlot.Player3,
+            PlayerSlot.Player4
+        };
+
+        foreach (PlayerSlot possibleSlot in slotOrder)
+        {
+            if (IsSlotTaken(possibleSlot))
+                continue;
+
+            _slot.Value = possibleSlot;
+
+            Debug.Log(
+                $"Assigned {possibleSlot} to client " +
+                $"{Owner.ClientId}.",
+                this
+            );
+
+            return;
+        }
+
+        _slot.Value = PlayerSlot.None;
+
+        Debug.LogWarning(
+            $"No player slot available for client " +
+            $"{Owner.ClientId}.",
+            this
+        );
+    }
+
+    private bool IsSlotTaken(PlayerSlot slot)
+    {
+        foreach (PlayerControlChannel channel
+                 in ServerChannels)
+        {
+            if (channel == null ||
+                channel == this)
+            {
+                continue;
+            }
+
+            if (channel.Slot == slot)
+                return true;
+        }
+
+        return false;
+    }
+
+    private void AssignNextAvailableLegacyRole()
     {
         if (!IsServerInitialized)
             return;
@@ -207,37 +320,43 @@ public class PlayerControlChannel : NetworkBehaviour
             PlayerControlRole.RightArm
         };
 
-        foreach (PlayerControlRole possibleRole in roleOrder)
+        foreach (PlayerControlRole possibleRole
+                 in roleOrder)
         {
-            if (!IsRoleTaken(possibleRole))
-            {
-                _role.Value = possibleRole;
+            if (IsLegacyRoleTaken(possibleRole))
+                continue;
 
-                Debug.Log(
-                    $"Assigned {possibleRole} to client " +
-                    $"{Owner.ClientId}.",
-                    this
-                );
+            _role.Value = possibleRole;
 
-                return;
-            }
+            Debug.Log(
+                $"Assigned legacy role {possibleRole} " +
+                $"to client {Owner.ClientId}.",
+                this
+            );
+
+            return;
         }
 
         _role.Value = PlayerControlRole.None;
 
         Debug.LogWarning(
-            $"No control role available for client " +
+            $"No legacy control role available for client " +
             $"{Owner.ClientId}.",
             this
         );
     }
 
-    private bool IsRoleTaken(PlayerControlRole role)
+    private bool IsLegacyRoleTaken(
+        PlayerControlRole role)
     {
-        foreach (PlayerControlChannel channel in ServerChannels)
+        foreach (PlayerControlChannel channel
+                 in ServerChannels)
         {
-            if (channel == null || channel == this)
+            if (channel == null ||
+                channel == this)
+            {
                 continue;
+            }
 
             if (channel.Role == role)
                 return true;
@@ -251,19 +370,34 @@ public class PlayerControlChannel : NetworkBehaviour
         if (!IsServerInitialized)
             return;
 
+        RawServerActionPressedThisTick = false;
         ServerActionPressedThisTick = false;
     }
 
     private void OnApplicationFocus(bool hasFocus)
     {
-        if (!hasFocus && IsOwner)
-            SubmitControlInputServerRpc(Vector2.zero, false);
+        if (!hasFocus &&
+            IsOwner &&
+            IsClientInitialized)
+        {
+            SubmitControlInputServerRpc(
+                Vector2.zero,
+                false
+            );
+        }
     }
 
     private void OnApplicationPause(bool isPaused)
     {
-        if (isPaused && IsOwner)
-            SubmitControlInputServerRpc(Vector2.zero, false);
+        if (isPaused &&
+            IsOwner &&
+            IsClientInitialized)
+        {
+            SubmitControlInputServerRpc(
+                Vector2.zero,
+                false
+            );
+        }
     }
 
     private void OnGUI()
@@ -272,8 +406,13 @@ public class PlayerControlChannel : NetworkBehaviour
             return;
 
         GUI.Label(
-            new Rect(20f, 20f, 500f, 40f),
-            $"Your role: {Role}"
+            new Rect(20f, 20f, 500f, 25f),
+            $"Player slot: {Slot}"
+        );
+
+        GUI.Label(
+            new Rect(20f, 45f, 500f, 25f),
+            $"Legacy walking role: {Role}"
         );
     }
 }

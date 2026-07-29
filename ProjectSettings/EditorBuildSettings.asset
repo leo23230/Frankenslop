@@ -8,8 +8,11 @@ EditorBuildSettings:
   - enabled: 0
     path: Assets/_Project/Scenes/SampleScene.unity
     guid: 99c9720ab356a0642a771bea13969a05
-  - enabled: 1
+  - enabled: 0
     path: Assets/_Project/Scenes/FishnetTest.unity
     guid: a7336ef912a148040a4f643167e18c6c
+  - enabled: 1
+    path: Assets/_Project/Scenes/HoleInTheWall.unity
+    guid: 80c92d8e887f7cc43a23d97876a9a4c7
   m_configObjects:
     com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
