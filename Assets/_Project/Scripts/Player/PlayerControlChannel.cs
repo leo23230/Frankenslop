@@ -19,6 +19,17 @@ public class PlayerControlChannel : NetworkBehaviour
     [SerializeField, Min(1f)]
     private float sendsPerSecond = 30f;
 
+    [Header("Debug Slot Testing")]
+    [Tooltip(
+        "Allows the owning client to switch PlayerSlot while running " +
+        "in the Editor or a Development Build."
+    )]
+    [SerializeField]
+    private bool enableSingleClientSlotSwitching = true;
+
+    [SerializeField]
+    private bool showDebugSlotUI = true;
+
     /*
      * Stable player identity.
      *
@@ -82,13 +93,7 @@ public class PlayerControlChannel : NetworkBehaviour
     {
         ServerChannels.Remove(this);
 
-        RawServerAxisInput = Vector2.zero;
-        RawServerActionHeld = false;
-        RawServerActionPressedThisTick = false;
-
-        ServerAxisInput = Vector2.zero;
-        ServerActionHeld = false;
-        ServerActionPressedThisTick = false;
+        ClearServerInputState();
 
         base.OnStopServer();
     }
@@ -126,6 +131,10 @@ public class PlayerControlChannel : NetworkBehaviour
         if (!IsOwner)
             return;
 
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        HandleDebugSlotSwitching();
+#endif
+
         Vector2 axisInput = ReadRawAxisInput();
         bool actionHeld = ReadRawActionInput();
 
@@ -157,6 +166,124 @@ public class PlayerControlChannel : NetworkBehaviour
             actionHeld
         );
     }
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+
+    private void HandleDebugSlotSwitching()
+    {
+        if (!enableSingleClientSlotSwitching)
+            return;
+
+        Keyboard keyboard = Keyboard.current;
+
+        if (keyboard == null)
+            return;
+
+        PlayerSlot requestedSlot = PlayerSlot.None;
+
+        if (keyboard.digit1Key.wasPressedThisFrame)
+        {
+            requestedSlot = PlayerSlot.Player1;
+        }
+        else if (keyboard.digit2Key.wasPressedThisFrame)
+        {
+            requestedSlot = PlayerSlot.Player2;
+        }
+        else if (keyboard.digit3Key.wasPressedThisFrame)
+        {
+            requestedSlot = PlayerSlot.Player3;
+        }
+        else if (keyboard.digit4Key.wasPressedThisFrame)
+        {
+            requestedSlot = PlayerSlot.Player4;
+        }
+        else if (keyboard.tabKey.wasPressedThisFrame)
+        {
+            requestedSlot = GetNextDebugSlot(Slot);
+        }
+
+        if (requestedSlot == PlayerSlot.None ||
+            requestedSlot == Slot)
+        {
+            return;
+        }
+
+        /*
+         * Clear the locally cached sent state so a zeroed input packet
+         * is sent immediately after changing slots.
+         */
+        _lastSentAxis = Vector2.zero;
+        _lastSentAction = false;
+        _nextSendTime = 0f;
+
+        RequestDebugSlotServerRpc(requestedSlot);
+    }
+
+    private static PlayerSlot GetNextDebugSlot(
+        PlayerSlot currentSlot)
+    {
+        return currentSlot switch
+        {
+            PlayerSlot.Player1 => PlayerSlot.Player2,
+            PlayerSlot.Player2 => PlayerSlot.Player3,
+            PlayerSlot.Player3 => PlayerSlot.Player4,
+            PlayerSlot.Player4 => PlayerSlot.Player1,
+            _ => PlayerSlot.Player1
+        };
+    }
+
+    [ServerRpc]
+    private void RequestDebugSlotServerRpc(
+        PlayerSlot requestedSlot)
+    {
+        if (!enableSingleClientSlotSwitching)
+            return;
+
+        if (!IsValidPlayableSlot(requestedSlot))
+            return;
+
+        if (requestedSlot == _slot.Value)
+            return;
+
+        if (IsSlotTaken(requestedSlot))
+        {
+            Debug.LogWarning(
+                $"Cannot switch client {Owner.ClientId} to " +
+                $"{requestedSlot}: that slot is already occupied.",
+                this
+            );
+
+            return;
+        }
+
+        PlayerSlot previousSlot = _slot.Value;
+
+        /*
+         * Remove all server-side input from the old assignment before
+         * changing slots. This prevents the previously controlled limb
+         * from receiving stale input for another server tick.
+         */
+        ClearServerInputState();
+
+        _slot.Value = requestedSlot;
+
+        Debug.Log(
+            $"Debug slot changed from {previousSlot} to " +
+            $"{requestedSlot} for client {Owner.ClientId}.",
+            this
+        );
+    }
+
+    private static bool IsValidPlayableSlot(
+        PlayerSlot slot)
+    {
+        return slot == PlayerSlot.Player1 ||
+               slot == PlayerSlot.Player2 ||
+               slot == PlayerSlot.Player3 ||
+               slot == PlayerSlot.Player4;
+    }
+
+#endif
 
     private Vector2 ReadRawAxisInput()
     {
@@ -365,6 +492,17 @@ public class PlayerControlChannel : NetworkBehaviour
         return false;
     }
 
+    private void ClearServerInputState()
+    {
+        RawServerAxisInput = Vector2.zero;
+        RawServerActionHeld = false;
+        RawServerActionPressedThisTick = false;
+
+        ServerAxisInput = Vector2.zero;
+        ServerActionHeld = false;
+        ServerActionPressedThisTick = false;
+    }
+
     public void ClearTickFlags()
     {
         if (!IsServerInitialized)
@@ -414,5 +552,55 @@ public class PlayerControlChannel : NetworkBehaviour
             new Rect(20f, 45f, 500f, 25f),
             $"Legacy walking role: {Role}"
         );
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+
+        if (enableSingleClientSlotSwitching &&
+            showDebugSlotUI)
+        {
+            GUI.Label(
+                new Rect(20f, 70f, 650f, 25f),
+                "Testing: press 1-4 to select a slot, or Tab to cycle."
+            );
+
+            GUI.Label(
+                new Rect(20f, 95f, 650f, 25f),
+                GetDebugControlledActionText()
+            );
+        }
+
+#endif
     }
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+
+    private string GetDebugControlledActionText()
+    {
+        /*
+         * These names match the current PoseableLimbBinding setup:
+         * Player1 -> LeftArm
+         * Player2 -> RightArm
+         * Player3 -> LeftLeg
+         * Player4 -> RightLeg
+         */
+        return Slot switch
+        {
+            PlayerSlot.Player1 =>
+                "Currently testing: Left Arm",
+
+            PlayerSlot.Player2 =>
+                "Currently testing: Right Arm",
+
+            PlayerSlot.Player3 =>
+                "Currently testing: Left Leg",
+
+            PlayerSlot.Player4 =>
+                "Currently testing: Right Leg",
+
+            _ =>
+                "Currently testing: No limb"
+        };
+    }
+
+#endif
 }
