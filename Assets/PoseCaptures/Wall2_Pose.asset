@@ -25,14 +25,14 @@ MonoBehaviour:
     required: 0
     minimumRequiredScore: 0
   leftFoot:
-    position: {x: -0.05, y: 0.043750793}
-    tolerance: {x: 1, y: 1}
+    position: {x: -0.3, y: 0.043750793}
+    tolerance: {x: 1, y: 0.5}
     weight: 1
     required: 0
     minimumRequiredScore: 0
   rightFoot:
-    position: {x: 0.05, y: 0.04375097}
-    tolerance: {x: 2, y: 2}
+    position: {x: 0.3, y: 0.04375097}
+    tolerance: {x: 1, y: 0.5}
     weight: 1
     required: 0
     minimumRequiredScore: 0

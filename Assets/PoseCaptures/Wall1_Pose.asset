@@ -14,26 +14,26 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::PoseTemplate
   leftHand:
     position: {x: -2.3978252, y: 1.5486808}
-    tolerance: {x: 30.85, y: 2}
-    weight: 0.5
+    tolerance: {x: 15, y: 3}
+    weight: 1
     required: 1
     minimumRequiredScore: 0
   rightHand:
     position: {x: 2.397825, y: 4.8986816}
-    tolerance: {x: 2, y: 2}
+    tolerance: {x: 4, y: 4}
     weight: 1
     required: 0
     minimumRequiredScore: 0
   leftFoot:
     position: {x: -1.8666673, y: 1.8639705}
-    tolerance: {x: 1, y: 1}
+    tolerance: {x: 2, y: 4}
     weight: 1
     required: 0
     minimumRequiredScore: 0
   rightFoot:
     position: {x: 0.3212667, y: 0.04375097}
     tolerance: {x: 0.5, y: 0.5}
-    weight: 1
+    weight: 0.5
     required: 0
     minimumRequiredScore: 0
   spineLean:

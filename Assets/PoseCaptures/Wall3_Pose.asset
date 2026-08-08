@@ -13,43 +13,43 @@ MonoBehaviour:
   m_Name: Wall3_Pose
   m_EditorClassIdentifier: Assembly-CSharp::PoseTemplate
   leftHand:
-    position: {x: -3.25, y: 6.4}
+    position: {x: -2.2333343, y: 6.4}
     tolerance: {x: 1, y: 1}
     weight: 1
     required: 0
     minimumRequiredScore: 0
   rightHand:
-    position: {x: 2.4949734, y: 0.7}
+    position: {x: 0.7, y: 0.7}
     tolerance: {x: 1, y: 1}
     weight: 1
     required: 0
     minimumRequiredScore: 0
   leftFoot:
-    position: {x: -0.15, y: 0}
+    position: {x: -0.05, y: 0}
     tolerance: {x: 1, y: 1}
     weight: 1
     required: 0
     minimumRequiredScore: 0
   rightFoot:
-    position: {x: 2.166667, y: 2.5}
+    position: {x: 1.7333336, y: 2.5}
     tolerance: {x: 1, y: 1}
     weight: 1
     required: 0
     minimumRequiredScore: 0
   spineLean:
-    targetDegrees: 26.1879
+    targetDegrees: 30.024008
     toleranceDegrees: 8
     weight: 0.5
     required: 0
     minimumRequiredScore: 0
   chestLean:
-    targetDegrees: 37.821735
+    targetDegrees: 43.36201
     toleranceDegrees: 10
     weight: 0.5
     required: 0
     minimumRequiredScore: 0
   headLean:
-    targetDegrees: -9.702712
+    targetDegrees: -11.124003
     toleranceDegrees: 8
     weight: 0.5
     required: 0
