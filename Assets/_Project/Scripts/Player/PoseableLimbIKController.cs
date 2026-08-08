@@ -145,13 +145,28 @@ public class PoseableLimbIKController : NetworkBehaviour
     [SerializeField, Min(0.01f)]
     private float fullArmVerticalReach = 0.75f;
 
-    [Range(0f, 1f)]
-    [SerializeField]
-    private float supportPointInfluence = 0.7f;
+    [Tooltip(
+        "Horizontal distance between a raised foot and the support point " +
+        "that counts as full raised-leg distance influence."
+    )]
+    [SerializeField, Min(0.01f)]
+    private float fullRaisedLegDistance = 0.75f;
 
     [Range(0f, 1f)]
     [SerializeField]
-    private float raisedLegInfluence = 0.3f;
+    private float supportPointInfluence = 0.55f;
+
+    [Range(0f, 1f)]
+    [SerializeField]
+    private float raisedLegInfluence = 0.25f;
+
+    [Tooltip(
+        "How strongly a raised leg's horizontal distance from the " +
+        "support point affects torso compensation."
+    )]
+    [Range(0f, 1f)]
+    [SerializeField]
+    private float raisedLegDistanceInfluence = 0.2f;
 
     [Header("Torso Pose")]
     [Tooltip(
@@ -240,6 +255,13 @@ public class PoseableLimbIKController : NetworkBehaviour
     private readonly SyncVar<Quaternion> _chestPoseRotation = new();
     private readonly SyncVar<Quaternion> _headPoseRotation = new();
 
+    /*
+     * Server-authoritative signed side-lean values used by pose scoring.
+     */
+    private readonly SyncVar<float> _spineLeanDegrees = new(0f);
+    private readonly SyncVar<float> _chestLeanDegrees = new(0f);
+    private readonly SyncVar<float> _headLeanDegrees = new(0f);
+
     private readonly SyncVar<bool> _isFallen = new(false);
     private readonly SyncVar<bool> _stateInitialized = new(false);
 
@@ -267,6 +289,61 @@ public class PoseableLimbIKController : NetworkBehaviour
     private bool _startingPoseStored;
 
     public bool IsFallen => _isFallen.Value;
+
+    public bool HasScoringState =>
+        _stateInitialized.Value;
+
+    public PoseableLimbAction GetAssignedAction(
+        PlayerSlot slot)
+    {
+        return GetActionForSlot(slot);
+    }
+
+    public Vector2 GetScoringLimbPosition(
+        PoseableLimbAction action)
+    {
+        Vector3 position = action switch
+        {
+            PoseableLimbAction.LeftArm =>
+                _leftHandPosition.Value,
+
+            PoseableLimbAction.RightArm =>
+                _rightHandPosition.Value,
+
+            PoseableLimbAction.LeftLeg =>
+                _leftFootPosition.Value,
+
+            PoseableLimbAction.RightLeg =>
+                _rightFootPosition.Value,
+
+            _ =>
+                Vector3.zero
+        };
+
+        return new Vector2(
+            position.x,
+            position.y
+        );
+    }
+
+    public float GetScoringLeanDegrees(
+        PoseLeanChannel channel)
+    {
+        return channel switch
+        {
+            PoseLeanChannel.Spine =>
+                _spineLeanDegrees.Value,
+
+            PoseLeanChannel.Chest =>
+                _chestLeanDegrees.Value,
+
+            PoseLeanChannel.Head =>
+                _headLeanDegrees.Value,
+
+            _ =>
+                0f
+        };
+    }
 
     private void Awake()
     {
@@ -398,6 +475,10 @@ public class PoseableLimbIKController : NetworkBehaviour
 
         _headPoseRotation.Value =
             _startingHeadPoseRotation;
+
+        _spineLeanDegrees.Value = 0f;
+        _chestLeanDegrees.Value = 0f;
+        _headLeanDegrees.Value = 0f;
 
         _unsupportedTimer = 0f;
         _isFallen.Value = false;
@@ -586,11 +667,20 @@ public class PoseableLimbIKController : NetworkBehaviour
         float raisedLegInfluenceValue =
             CalculateRaisedLegBalance();
 
+        /*
+         * Inverted so a leg extended away from support increases
+         * compensation toward the supporting side.
+         */
+        float raisedLegDistanceValue =
+            -CalculateRaisedLegDistanceBalance();
+
         float combinedBalance =
             supportPointInfluenceValue *
             supportPointInfluence +
             raisedLegInfluenceValue *
-            raisedLegInfluence;
+            raisedLegInfluence +
+            raisedLegDistanceValue *
+            raisedLegDistanceInfluence;
 
         combinedBalance =
             Mathf.Clamp(
@@ -639,6 +729,15 @@ public class PoseableLimbIKController : NetworkBehaviour
         float headPitch =
             -chestPitch *
             headPitchCounterbalance;
+
+        _spineLeanDegrees.Value =
+            spineSideLean;
+
+        _chestLeanDegrees.Value =
+            chestSideLean;
+
+        _headLeanDegrees.Value =
+            headSideLean;
 
         _spinePoseRotation.Value =
             BuildPoseTargetRotation(
@@ -701,7 +800,7 @@ public class PoseableLimbIKController : NetworkBehaviour
                rightLift;
     }
 
-    private float CalculateSupportPointInfluence()
+    private float CalculateCurrentSupportPointX()
     {
         float leftLift =
             CalculateLegLiftAmount(
@@ -727,22 +826,22 @@ public class PoseableLimbIKController : NetworkBehaviour
             leftSupportWeight +
             rightSupportWeight;
 
-        /*
-         * When both feet are fully raised, the fall system takes over.
-         * Returning zero prevents an arbitrary torso snap during the
-         * unsupported grace period.
-         */
         if (totalSupportWeight <= 0.001f)
-            return 0f;
+            return _startingSupportPointX;
 
+        return (
+            _leftFootPosition.Value.x *
+            leftSupportWeight +
+            _rightFootPosition.Value.x *
+            rightSupportWeight
+        ) /
+        totalSupportWeight;
+    }
+
+    private float CalculateSupportPointInfluence()
+    {
         float currentSupportPointX =
-            (
-                _leftFootPosition.Value.x *
-                leftSupportWeight +
-                _rightFootPosition.Value.x *
-                rightSupportWeight
-            ) /
-            totalSupportWeight;
+            CalculateCurrentSupportPointX();
 
         float supportOffsetX =
             currentSupportPointX -
@@ -751,6 +850,55 @@ public class PoseableLimbIKController : NetworkBehaviour
         return Mathf.Clamp(
             supportOffsetX /
             fullSupportPointShift,
+            -1f,
+            1f
+        );
+    }
+
+    private float CalculateRaisedLegDistanceBalance()
+    {
+        float leftLift =
+            CalculateLegLiftAmount(
+                _leftFootPosition.Value,
+                _leftFootFloorHeight
+            );
+
+        float rightLift =
+            CalculateLegLiftAmount(
+                _rightFootPosition.Value,
+                _rightFootFloorHeight
+            );
+
+        float totalLift =
+            leftLift +
+            rightLift;
+
+        if (totalLift <= 0.001f)
+            return 0f;
+
+        float supportPointX =
+            CalculateCurrentSupportPointX();
+
+        float leftDistance =
+            _leftFootPosition.Value.x -
+            supportPointX;
+
+        float rightDistance =
+            _rightFootPosition.Value.x -
+            supportPointX;
+
+        float weightedDistance =
+            leftDistance *
+            leftLift +
+            rightDistance *
+            rightLift;
+
+        weightedDistance /=
+            totalLift;
+
+        return Mathf.Clamp(
+            weightedDistance /
+            fullRaisedLegDistance,
             -1f,
             1f
         );
@@ -914,6 +1062,32 @@ public class PoseableLimbIKController : NetworkBehaviour
 
         Debug.Log(
             "Both feet lost support. Starting ragdoll.",
+            this
+        );
+    }
+
+    [Server]
+    public void ServerDie()
+    {
+        if (_isFallen.Value)
+            return;
+
+        _isFallen.Value = true;
+        _unsupportedTimer = 0f;
+
+        // Important:
+        // A normal imbalance schedules its own reset.
+        // A minigame death does NOT.
+        if (_fallRoutine != null)
+        {
+            StopCoroutine(_fallRoutine);
+            _fallRoutine = null;
+        }
+
+        TriggerFallObserversRpc();
+
+        Debug.Log(
+            "Player died. Beginning ragdoll.",
             this
         );
     }

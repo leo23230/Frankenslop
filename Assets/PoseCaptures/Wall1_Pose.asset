@@ -1,0 +1,64 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 08e7c606bf23e9c48b261d1c9ff97993, type: 3}
+  m_Name: Wall1_Pose
+  m_EditorClassIdentifier: Assembly-CSharp::PoseTemplate
+  leftHand:
+    position: {x: -2.3978252, y: 1.5486808}
+    tolerance: {x: 30.85, y: 2}
+    weight: 0.5
+    required: 1
+    minimumRequiredScore: 0
+  rightHand:
+    position: {x: 2.397825, y: 4.8986816}
+    tolerance: {x: 2, y: 2}
+    weight: 1
+    required: 0
+    minimumRequiredScore: 0
+  leftFoot:
+    position: {x: -1.8666673, y: 1.8639705}
+    tolerance: {x: 1, y: 1}
+    weight: 1
+    required: 0
+    minimumRequiredScore: 0
+  rightFoot:
+    position: {x: 0.3212667, y: 0.04375097}
+    tolerance: {x: 0.5, y: 0.5}
+    weight: 1
+    required: 0
+    minimumRequiredScore: 0
+  spineLean:
+    targetDegrees: -22.24
+    toleranceDegrees: 10
+    weight: 0.5
+    required: 0
+    minimumRequiredScore: 0
+  chestLean:
+    targetDegrees: -32.12
+    toleranceDegrees: 20
+    weight: 0.5
+    required: 0
+    minimumRequiredScore: 0
+  headLean:
+    targetDegrees: 8.24
+    toleranceDegrees: 8
+    weight: 0.5
+    required: 0
+    minimumRequiredScore: 0
+  overallThresholds:
+    passMinimum: 0.55
+    goodMinimum: 0.75
+    perfectMinimum: 0.95
+  individualThresholds:
+    passMinimum: 0.5
+    goodMinimum: 0.8
+    perfectMinimum: 0.95
