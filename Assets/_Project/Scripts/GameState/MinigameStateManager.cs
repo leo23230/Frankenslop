@@ -90,8 +90,8 @@ public class MinigameStateManager : NetworkBehaviour
 
         StopWalls();
         KillPlayers();
-        CameraEffects.Instance.ZoomBackOnFail();
-        CameraEffects.Instance.Shake(0.3f, 0.5f);
+        //CameraEffects.Instance.ZoomBackOnFail();
+        //CameraEffects.Instance.Shake(0.3f, 0.5f);
 
         yield return new WaitForSeconds(failureResetDelay);
 
@@ -166,7 +166,7 @@ public class MinigameStateManager : NetworkBehaviour
     [Server]
     private void ResetMinigameInternal()
     {
-        CameraEffects.Instance.ResetZoom();
+        //CameraEffects.Instance.ResetZoom();
         ResetPlayers();
         ResetWalls();
 
