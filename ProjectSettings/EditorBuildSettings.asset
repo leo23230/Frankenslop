@@ -12,6 +12,12 @@ EditorBuildSettings:
     path: Assets/_Project/Scenes/FishnetTest.unity
     guid: a7336ef912a148040a4f643167e18c6c
   - enabled: 1
+    path: Assets/_Project/Scenes/Bootstrap.unity
+    guid: 3081e5577e6639a4a8104fc9fc939833
+  - enabled: 1
+    path: Assets/_Project/Scenes/Lobby.unity
+    guid: e22180847dd0bde4cba484299b6cf6bb
+  - enabled: 1
     path: Assets/_Project/Scenes/HoleInTheWall.unity
     guid: 80c92d8e887f7cc43a23d97876a9a4c7
   m_configObjects:
