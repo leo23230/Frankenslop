@@ -42,6 +42,7 @@ public sealed class MainMenuController : MonoBehaviour
 
         if (joinPanel != null)
             joinPanel.SetActive(false);
+
     }
 
     private void OnDestroy()
@@ -67,16 +68,13 @@ public sealed class MainMenuController : MonoBehaviour
 
     public void OpenJoinBrowser()
     {
-        if (joinPanel != null)
-            joinPanel.SetActive(true);
-
+        ShowJoinBrowser();
         RefreshLobbies();
     }
 
     public void CloseJoinBrowser()
     {
-        if (joinPanel != null)
-            joinPanel.SetActive(false);
+        ShowMainMenu();
     }
 
     public void RefreshLobbies()
@@ -125,15 +123,13 @@ public sealed class MainMenuController : MonoBehaviour
 
     private void HandleClientConnectionState(ClientConnectionStateArgs args)
     {
-        if (menuPanel == null) return;
-
         switch (args.ConnectionState)
         {
             case LocalConnectionState.Started:
-                menuPanel.SetActive(false);
+                HideAllMenuPanels();
                 break;
             case LocalConnectionState.Stopped:
-                menuPanel.SetActive(true);
+                ShowMainMenu();
                 break;
         }
     }
@@ -148,4 +144,26 @@ public sealed class MainMenuController : MonoBehaviour
 
         _spawnedRows.Clear();
     }
+
+
+
+    private void ShowMainMenu()
+    {
+        if (menuPanel != null) menuPanel.SetActive(true);
+        if (joinPanel != null) joinPanel.SetActive(false);
+    }
+
+    private void ShowJoinBrowser()
+    {
+        if (menuPanel != null) menuPanel.SetActive(false);
+        if (joinPanel != null) joinPanel.SetActive(true);
+    }
+
+    private void HideAllMenuPanels()
+    {
+        if (menuPanel != null) menuPanel.SetActive(false);
+        if (joinPanel != null) joinPanel.SetActive(false);
+    }
+
+
 }
